@@ -105,7 +105,11 @@ function actor_update()
     local tg = time_global()
     local active_item = db.actor:active_item()
     local weapon_is_safe = false
-    if (not active_item) or (active_item:section() == "wpn_knife") or (IsDetector(active_item)) then
+    if (not active_item)
+        or (active_item:section() == "wpn_knife")
+        or (active_item:section() == "device_pda")
+        or (string.sub(active_item:section(), 1, 9) == "detector_")
+    then
         weapon_is_safe = true
     end
     -- 1. Gestione del Delay del PDA per la fazione circostante
@@ -117,10 +121,23 @@ function actor_update()
                     manage_local_faction(victim, game_object.neutral, anim.panic)
                 else
                     if weapon_is_safe then
-                        manage_local_faction(victim, game_object.neutral, anim.panic)
-                        alert.triggered = true 
+                        -- Pacify ALL involved NPCs in the faction
+                        for id, obj in pairs(db.storage) do
+                            local npc = level.object_by_id(id)
+                            if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
+                                npc:set_relation(game_object.neutral, db.actor)
+                                npc:set_mental_state(anim.panic)
+                            end
+                        end
+                        alert.triggered = true
                     else
-                        manage_local_faction(victim, game_object.enemy, nil)
+                        -- All become enemies
+                        for id, obj in pairs(db.storage) do
+                            local npc = level.object_by_id(id)
+                            if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
+                                npc:set_relation(game_object.enemy, db.actor)
+                            end
+                        end
                         faction_alert_status[comm] = nil
                     end
                 end
