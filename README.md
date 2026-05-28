@@ -10,7 +10,6 @@ Adds a surrender and faction penalty system for friendly fire incidents with PDA
 - 3-second faction delay before automatic hostility
 - Local PDA network faction coordination
 - Dynamic NPC behavior management
-    ## TODO
     - Bribery system to stop faction alerts
     - Forced timed quest alternative for broke players
     - Double reputation loss on failure/refusal

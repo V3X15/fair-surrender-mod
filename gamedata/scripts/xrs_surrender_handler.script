@@ -2,12 +2,12 @@
 -- SURRENDER & BRIBERY MOD (FACTION, PDA NETWORK & FORCED QUEST UPDATE)
 -- File: xrs_surrender_handler.script
 -- ==============================================================================
-local TIMER_LIMIT = 5       -- Tempo massimo per il giocatore per rinfoderare l'arma
-local FACTION_DELAY = 3     -- Delay in secondi prima che gli alleati circostanti attacchino
+local TIMER_LIMIT = 5       -- Maximum time for the player to holster the weapon
+local FACTION_DELAY = 3     -- Delay in seconds before nearby allies attack
 local BASE_COST = 5000
-local REP_PENALTY_FORCED = -200 -- Perdita doppia di reputazione (Mazzata hardcore)
+local REP_PENALTY_FORCED = -200 -- Double reputation loss (hardcore penalty)
 local affected_npcs = {}
-local faction_alert_status = {} -- Traccia l'allerta di fazione nell'area
+local faction_alert_status = {} -- Tracks faction alert in the area
 local rank_values = {
     ["novice"] = 1, ["trainee"] = 2, ["experienced"] = 3, ["professional"] = 4,
     ["veteran"] = 5, ["expert"] = 6, ["master"] = 7, ["legend"] = 8
@@ -16,22 +16,20 @@ function on_game_start()
     RegisterScriptCallback("npc_on_hit_callback", npc_on_hit)
     RegisterScriptCallback("actor_on_update", actor_update)
 end
--- Funzione per gestire la rete PDA locale e allertare/calmare la fazione circostante
+-- Function to manage the local PDA network and alert/calm the nearby faction
 local function manage_local_faction(victim_npc, relation_to_set, mental_state)
     local victim_comm = victim_npc:character_community()
     local victim_id = victim_npc:id()
     for id, obj in pairs(db.storage) do
         local npc = level.object_by_id(id)
         if npc and id ~= victim_id and id ~= AC_ID and IsStalker(npc) and npc:alive() then
-            -- Se appartiene alla stessa fazione ed � nel raggio radio del PDA (120 metri)
+            -- If belongs to the same faction and is within PDA radio range (120 meters)
             if npc:character_community() == victim_comm and npc:position():distance_to(victim_npc:position()) < 120 then
                 npc:set_relation(relation_to_set, db.actor)
                 if mental_state then
                     npc:set_mental_state(mental_state)
                 end
-                if relation_to_set == game_object.enemy then
-                    npc:set_script_control(false)
-                end
+                -- Removed npc:set_script_control(false) to prevent nil value crash
             end
         end
     end
