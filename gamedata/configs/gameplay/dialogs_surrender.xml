@@ -1,18 +1,18 @@
 <dialogs>
   <dialog id="surrender_bribe_dialog">
-    <text>Metti giù quel ferro! Il mio PDA ha inviato l'allerta di fuoco amico alla squadra. Se non vuoi finire crivellato, sborsa i rubli per le cure o prenditi la responsabilità di rimediare!</text>
+    <text>Hold it! My PDA just flagged you for taking shots at usâ€”possible traitor alert. If you don't want the squad to open fire, pay up for medical expenses or prove you're not a threat!</text>
     <option id="pay_bribe">
-      <text>È stato un errore d'accordo? Tieni i rubli, invia l'annullamento dell'allerta sul PDA.</text>
+      <text>It was a mistake, alright? Take the money, cancel the alert on the PDA.</text>
       <precondition>xrs_surrender_handler.precondition_can_afford</precondition>
       <action>xrs_surrender_handler.action_pay_bribe</action>
     </option>
     <option id="forced_task">
-      <text>Al verde? Tipico. Allora ti prenderai un incarico forzato a tempo per me e la mia squadra. Rifiuta, fallisci o prova a scappare, e invierò il via libera radio per l'esecuzione immediata, distruggendo la tua reputazione con noi. Ci stai?</text>
+      <text>Broke? Typical. Then you'll take a forced timed task for me and my squad. Refuse, fail, or try to run, and I'll send the radio go-ahead for immediate execution, destroying your reputation with us. Are you in?</text>
       <precondition>xrs_surrender_handler.precondition_cannot_afford</precondition>
       <action>xrs_surrender_handler.action_accept_forced_task</action>
     </option>
     <option id="refuse">
-      <text>Scordatelo. Preferisco risolverla con le cattive.</text>
+      <text>Forget it. I'd rather settle this the hard way.</text>
       <action>xrs_surrender_handler.action_refuse_and_punish</action>
     </option>
   </dialog>
