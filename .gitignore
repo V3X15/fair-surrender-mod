@@ -1,10 +1,3 @@
-# ZIP archives
-*.zip
-
-# Temporary folders
-Fair_Surrender/
-Auro_s_Fair_Surrender/
-
 # OS-specific
 .DS_Store
 Thumbs.db

@@ -8,11 +8,12 @@ Adds a surrender and faction penalty system for friendly fire incidents with PDA
 
 ## Features
 - 3-second faction delay before automatic hostility
-- Bribery system to stop faction alerts
-- Forced timed quest alternative for broke players
-- Double reputation loss on failure/refusal
 - Local PDA network faction coordination
 - Dynamic NPC behavior management
+    ## TODO
+    - Bribery system to stop faction alerts
+    - Forced timed quest alternative for broke players
+    - Double reputation loss on failure/refusal
 
 ## Created Files
 - `gamedata/scripts/xrs_surrender_handler.script`
@@ -32,8 +33,6 @@ Adds a surrender and faction penalty system for friendly fire incidents with PDA
 
 ## Notes
 - Quest uses `wpn_medkit_advanced` as the target item (30 min duration)
-- Dialog system includes fallback compatibility for multiple XRAY engine versions
-
 See `CHANGELOG.md` for version history and `VERSION.txt` for current version.
 
 ## Support & Issues
