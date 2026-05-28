@@ -23,13 +23,12 @@ local function manage_local_faction(victim_npc, relation_to_set, mental_state)
     for id, obj in pairs(db.storage) do
         local npc = level.object_by_id(id)
         if npc and id ~= victim_id and id ~= AC_ID and IsStalker(npc) and npc:alive() then
-            -- If belongs to the same faction and is within PDA radio range (120 meters)
-            if npc:character_community() == victim_comm and npc:position():distance_to(victim_npc:position()) < 120 then
+            -- Esteso: tutti i PNG della fazione nella mappa, senza limiti di distanza
+            if npc:character_community() == victim_comm then
                 npc:set_relation(relation_to_set, db.actor)
                 if mental_state then
                     npc:set_mental_state(mental_state)
                 end
-                -- Removed npc:set_script_control(false) to prevent nil value crash
             end
         end
     end
@@ -106,7 +105,6 @@ function actor_update()
     local active_item = db.actor:active_item()
     local weapon_is_safe = false
     if (not active_item)
-        or (active_item:section() == "wpn_knife")
         or (active_item:section() == "device_pda")
         or (string.sub(active_item:section(), 1, 9) == "detector_")
     then
@@ -151,23 +149,32 @@ function actor_update()
             end
         end
     end
-    -- 2. Gestione del bersaglio principale colto da fuoco amico
+    -- 2. Handling of the main target caught by friendly fire
     for npc_id, data in pairs(affected_npcs) do
         local npc = level.object_by_id(npc_id)
         if npc and npc:alive() then
             if data.state == "waiting" then
                 if (tg - data.timestamp) > (TIMER_LIMIT * 1000) then
-                    local pacified = false
+                    local all_pacified = true
                     if weapon_is_safe then
                         npc:set_relation(game_object.neutral, db.actor)
                         npc:set_mental_state(anim.panic)
-                        pacified = true
                     else
                         npc:set_relation(game_object.enemy, db.actor)
                         manage_local_faction(npc, game_object.enemy, nil)
+                        all_pacified = false
                     end
-                    -- Penalità solo se NON pacificato
-                    if not pacified then
+                    -- Controlla tutti gli NPC della fazione: se almeno uno è ostile, penalità
+                    for id, obj in pairs(db.storage) do
+                        local other = level.object_by_id(id)
+                        if other and other:character_community() == data.faction and other:alive() and id ~= AC_ID then
+                            if other:relation(db.actor) ~= game_object.neutral then
+                                all_pacified = false
+                                break
+                            end
+                        end
+                    end
+                    if not all_pacified then
                         apply_double_reputation_loss(data.faction)
                     end
                     affected_npcs[npc_id] = nil
@@ -191,7 +198,7 @@ function actor_update()
 end
 function apply_double_reputation_loss(faction)
     game_relations.change_factions_community_num(faction, AC_ID, REP_PENALTY_FORCED)
-    news_manager.send_tip(db.actor, "PDA: Reputazione con " .. faction .. " gravemente compromessa (Fuoco Amico).", nil, "recent_context", 4000)
+    news_manager.send_tip(db.actor, "PDA: Reputation with " .. faction .. " severely compromised (Friendly Fire).", nil, "recent_context", 4000)
 end
 function get_bribe_cost(npc)
     local npc_rank_str = ranks.get_obj_rank_name(npc)
