@@ -1,0 +1,11 @@
+[surrender_bribe_task]
+type = storyline
+task_type = additional
+target_functor = general_tasks.target_fetch_item
+status_functor = idx_tasks.status_fetch_item
+target = wpn_medkit_advanced
+title = Sforzo di Compensazione (Fuoco Amico)
+descr = Hai colpito per sbaglio un alleato. Per rimediare all'incidente senza farti sparare dalla fazione e salvare la tua reputazione, devi consegnargli un Kit Medico Avanzato prima che scada il tempo sul PDA.
+queue_item_section = medkit_advanced
+condlist_0 = {+surrender_bribe_task_done} complete
+duration = 1800 ; 30 minuti reali (in secondi). Se scade, si attiva il fallimento e la perdita doppia di goodwill.

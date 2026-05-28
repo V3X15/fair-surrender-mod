@@ -1,0 +1,19 @@
+<dialogs>
+  <dialog id="surrender_bribe_dialog">
+    <text>Metti giù quel ferro! Il mio PDA ha inviato l'allerta di fuoco amico alla squadra. Se non vuoi finire crivellato, sborsa i rubli per le cure o prenditi la responsabilità di rimediare!</text>
+    <option id="pay_bribe">
+      <text>È stato un errore d'accordo? Tieni i rubli, invia l'annullamento dell'allerta sul PDA.</text>
+      <precondition>xrs_surrender_handler.precondition_can_afford</precondition>
+      <action>xrs_surrender_handler.action_pay_bribe</action>
+    </option>
+    <option id="forced_task">
+      <text>Al verde? Tipico. Allora ti prenderai un incarico forzato a tempo per me e la mia squadra. Rifiuta, fallisci o prova a scappare, e invierò il via libera radio per l'esecuzione immediata, distruggendo la tua reputazione con noi. Ci stai?</text>
+      <precondition>xrs_surrender_handler.precondition_cannot_afford</precondition>
+      <action>xrs_surrender_handler.action_accept_forced_task</action>
+    </option>
+    <option id="refuse">
+      <text>Scordatelo. Preferisco risolverla con le cattive.</text>
+      <action>xrs_surrender_handler.action_refuse_and_punish</action>
+    </option>
+  </dialog>
+</dialogs>

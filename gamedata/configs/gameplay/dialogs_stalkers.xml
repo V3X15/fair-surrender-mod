@@ -1,0 +1,41 @@
+<dialogs>
+  <dialog id="stalker_greeting">
+    <text>Hey, stranger. Haven't seen you around. You looking to trade, or just passing through?</text>
+    <option id="trade">
+      <text>Got anything to trade? I can barter for food or ammo.</text>
+    </option>
+    <option id="pass">
+      <text>Just passing. Watch your back — mutants at night.</text>
+    </option>
+  </dialog>
+
+  <dialog id="stalker_offer_escort">
+    <text>I'm heading toward the old mill. Pay a few rubles and I'll escort you through the swamp.</text>
+    <option id="accept">
+      <text>Sounds good. I'll pay for the escort.</text>
+    </option>
+    <option id="decline">
+      <text>Not interested. I'll go alone.</text>
+    </option>
+  </dialog>
+
+  <dialog id="stalker_artifact_tip">
+    <text>I heard the bar near the Cordon is paying well for artifacts. Keep an eye out near the anomaly fields, but don't get greedy.</text>
+    <option id="thanks">
+      <text>Thanks for the tip.</text>
+    </option>
+    <option id="ignore">
+      <text>I'll pass. Sounds risky.</text>
+    </option>
+  </dialog>
+
+  <dialog id="stalker_warning">
+    <text>Listen: at night the territory gets worse. If you value your head, find a safe house before dusk.</text>
+    <option id="ok">
+      <text>I'll find shelter. Cheers.</text>
+    </option>
+    <option id="brave">
+      <text>I can handle myself. Thanks anyway.</text>
+    </option>
+  </dialog>
+</dialogs>

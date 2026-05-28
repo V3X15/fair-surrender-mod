@@ -1,0 +1,205 @@
+-- ==============================================================================
+-- SURRENDER & BRIBERY MOD (FACTION, PDA NETWORK & FORCED QUEST UPDATE)
+-- File: xrs_surrender_handler.script
+-- ==============================================================================
+local TIMER_LIMIT = 5       -- Tempo massimo per il giocatore per rinfoderare l'arma
+local FACTION_DELAY = 3     -- Delay in secondi prima che gli alleati circostanti attacchino
+local BASE_COST = 5000
+local REP_PENALTY_FORCED = -200 -- Perdita doppia di reputazione (Mazzata hardcore)
+local affected_npcs = {}
+local faction_alert_status = {} -- Traccia l'allerta di fazione nell'area
+local rank_values = {
+    ["novice"] = 1, ["trainee"] = 2, ["experienced"] = 3, ["professional"] = 4,
+    ["veteran"] = 5, ["expert"] = 6, ["master"] = 7, ["legend"] = 8
+}
+function on_game_start()
+    RegisterScriptCallback("npc_on_hit_callback", npc_on_hit)
+    RegisterScriptCallback("actor_on_update", actor_update)
+end
+-- Funzione per gestire la rete PDA locale e allertare/calmare la fazione circostante
+local function manage_local_faction(victim_npc, relation_to_set, mental_state)
+    local victim_comm = victim_npc:character_community()
+    local victim_id = victim_npc:id()
+    for id, obj in pairs(db.storage) do
+        local npc = level.object_by_id(id)
+        if npc and id ~= victim_id and id ~= AC_ID and IsStalker(npc) and npc:alive() then
+            -- Se appartiene alla stessa fazione ed � nel raggio radio del PDA (120 metri)
+            if npc:character_community() == victim_comm and npc:position():distance_to(victim_npc:position()) < 120 then
+                npc:set_relation(relation_to_set, db.actor)
+                if mental_state then
+                    npc:set_mental_state(mental_state)
+                end
+                if relation_to_set == game_object.enemy then
+                    npc:set_script_control(false)
+                end
+            end
+        end
+    end
+end
+function npc_on_hit(npc, damage, direction, who, bone_id)
+    if not (who and who:id() == AC_ID) then return end
+    if not (npc and IsStalker(npc) and npc:alive()) then return end
+    local npc_id = npc:id()
+    local npc_comm = npc:character_community()
+    local actor_comm = db.actor:character_community()
+    if game_relations.is_factions_friends(actor_comm, npc_comm) or game_relations.is_factions_neutrals(actor_comm, npc_comm) then
+        if not affected_npcs[npc_id] then
+            local tg = time_global()
+            affected_npcs[npc_id] = {
+                timestamp = tg,
+                state = "waiting",
+                original_relation = npc:relation(db.actor),
+                faction = npc_comm
+            }
+            -- Innesca il delay radio del PDA per la fazione locale
+            faction_alert_status[npc_comm] = {
+                start_time = tg,
+                victim_id = npc_id,
+                triggered = false
+            }
+            local dialog_opened = false
+            local candidates = {"set_character_dialog", "set_dialog", "start_dialog", "start_character_dialog", "open_dialog", "character_dialog"}
+            local tried = {}
+            for _, name in ipairs(candidates) do
+                local fn = npc[name]
+                if type(fn) == "function" then
+                    -- Try multiple calling signatures to match engine binding
+                    local patterns = {
+                        function() return fn(npc, "surrender_bribe_dialog") end,
+                        function() return fn("surrender_bribe_dialog") end,
+                        function() return fn(npc, "surrender_bribe_dialog", db.actor) end,
+                        function() return fn("surrender_bribe_dialog", db.actor) end,
+                        function() return fn(npc) end,
+                    }
+                    for _, pat in ipairs(patterns) do
+                        local ok, res = pcall(pat)
+                        table.insert(tried, {name = name, ok = ok, res = tostring(res)})
+                        if ok then
+                            dialog_opened = true
+                            break
+                        end
+                    end
+                    if dialog_opened then break end
+                end
+            end
+            if not dialog_opened then
+                -- Send compact debug info to help identify which signatures exist
+                local msg = "PDA dialog not opened. Tried:"
+                for i, t in ipairs(tried) do
+                    if i > 4 then break end
+                    msg = msg .. "\n" .. t.name .. " => " .. (t.ok and "ok" or "err")
+                end
+                news_manager.send_tip(db.actor, msg, nil, "recent_context", 6000)
+            end
+            news_manager.send_tip(db.actor, "PDA: Fuoco amico su frequenza " .. npc_comm .. "! Analisi di rete in corso...", nil, "recent_context", 4000)
+        end
+    end
+end
+function actor_update()
+    local tg = time_global()
+    local active_item = db.actor:active_item()
+    local weapon_is_safe = false
+    if (not active_item) or (active_item:section() == "wpn_knife") or (IsDetector(active_item)) then
+        weapon_is_safe = true
+    end
+    -- 1. Gestione del Delay del PDA per la fazione circostante
+    for comm, alert in pairs(faction_alert_status) do
+        if not alert.triggered then
+            local victim = level.object_by_id(alert.victim_id)
+            if victim and victim:alive() then
+                if (tg - alert.start_time) < (FACTION_DELAY * 1000) then
+                    manage_local_faction(victim, game_object.neutral, anim.panic)
+                else
+                    if weapon_is_safe then
+                        manage_local_faction(victim, game_object.neutral, anim.panic)
+                        alert.triggered = true 
+                    else
+                        manage_local_faction(victim, game_object.enemy, nil)
+                        faction_alert_status[comm] = nil
+                    end
+                end
+            else
+                faction_alert_status[comm] = nil
+            end
+        end
+    end
+    -- 2. Gestione del bersaglio principale colto da fuoco amico
+    for npc_id, data in pairs(affected_npcs) do
+        local npc = level.object_by_id(npc_id)
+        if npc and npc:alive() then
+            if data.state == "waiting" then
+                if (tg - data.timestamp) > (TIMER_LIMIT * 1000) then
+                    apply_double_reputation_loss(data.faction)
+                    npc:set_relation(game_object.enemy, db.actor)
+                    manage_local_faction(npc, game_object.enemy, nil)
+                    affected_npcs[npc_id] = nil
+                    faction_alert_status[data.faction] = nil
+                elseif weapon_is_safe and (tg - data.timestamp) >= (FACTION_DELAY * 1000) then
+                    npc:set_relation(game_object.neutral, db.actor)
+                    npc:set_mental_state(anim.panic)
+                    data.state = "pacified"
+                end
+            elseif data.state == "pacified" and not weapon_is_safe then
+                apply_double_reputation_loss(data.faction)
+                npc:set_relation(game_object.enemy, db.actor)
+                manage_local_faction(npc, game_object.enemy, nil)
+                affected_npcs[npc_id] = nil
+                faction_alert_status[data.faction] = nil
+            end
+        else
+            affected_npcs[npc_id] = nil
+        end
+    end
+end
+function apply_double_reputation_loss(faction)
+    game_relations.change_factions_community_num(faction, AC_ID, REP_PENALTY_FORCED)
+    news_manager.send_tip(db.actor, "PDA: Reputazione con " .. faction .. " gravemente compromessa (Fuoco Amico).", nil, "recent_context", 4000)
+end
+function get_bribe_cost(npc)
+    local npc_rank_str = ranks.get_obj_rank_name(npc)
+    local actor_rank_str = ranks.get_obj_rank_name(db.actor)
+    local npc_r = rank_values[npc_rank_str] or 3
+    local actor_r = rank_values[actor_rank_str] or 3
+    local diff = npc_r - actor_r
+    if diff < 0 then diff = 0 end
+    return BASE_COST * (1 + diff)
+end
+function precondition_can_afford(actor, npc)
+    return actor:money() >= get_bribe_cost(npc)
+end
+function precondition_cannot_afford(actor, npc)
+    return actor:money() < get_bribe_cost(npc)
+end
+function action_pay_bribe(actor, npc)
+    local cost = get_bribe_cost(npc)
+    actor:transfer_money(cost, npc)
+    close_surrender_incident(npc, true)
+end
+function action_accept_forced_task(actor, npc)
+    task_manager.get_task_manager():give_task("surrender_bribe_task")
+    close_surrender_incident(npc, false)
+end
+function action_refuse_and_punish(actor, npc)
+    local npc_id = npc:id()
+    local faction = npc:character_community()
+    apply_double_reputation_loss(faction)
+    npc:set_relation(game_object.enemy, db.actor)
+    manage_local_faction(npc, game_object.enemy, nil)
+    affected_npcs[npc_id] = nil
+    faction_alert_status[faction] = nil
+end
+function close_surrender_incident(npc, success)
+    local npc_id = npc:id()
+    local comm = npc:character_community()
+    if success then
+        news_manager.send_tip(db.actor, npc:character_name() .. " via PDA: Incidente risolto. Cessato allarme.", nil, "recent_context", 4000)
+    end
+    if affected_npcs[npc_id] then
+        local target_relation = success and affected_npcs[npc_id].original_relation or game_object.neutral
+        npc:set_relation(target_relation, db.actor)
+        manage_local_faction(npc, target_relation, anim.free)
+        affected_npcs[npc_id] = nil
+    end
+    faction_alert_status[comm] = nil
+    npc:reset_action_queue()
+end
