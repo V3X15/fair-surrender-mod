@@ -1,6 +1,6 @@
 <dialogs>
   <dialog id="surrender_bribe_dialog">
-    <text>Hold it! My PDA just flagged you for taking shots at us—possible traitor alert. If you don't want the squad to open fire, pay up for medical expenses or prove you're not a threat!</text>
+    <text>Hold it! My PDA just flagged you for taking shots at us - possible traitor alert. If you don't want the squad to open fire, pay up for medical expenses or prove you're not a threat!</text>
     <option id="pay_bribe">
       <text>It was a mistake, alright? Take the money, cancel the alert on the PDA.</text>
       <precondition>xrs_surrender_handler.precondition_can_afford</precondition>

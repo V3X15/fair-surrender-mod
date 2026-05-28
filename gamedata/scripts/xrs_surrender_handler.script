@@ -45,53 +45,61 @@ function npc_on_hit(npc, damage, direction, who, bone_id)
     if game_relations.is_factions_friends(actor_comm, npc_comm) or game_relations.is_factions_neutrals(actor_comm, npc_comm) then
         if not affected_npcs[npc_id] then
             local tg = time_global()
-            affected_npcs[npc_id] = {
-                timestamp = tg,
-                state = "waiting",
-                original_relation = npc:relation(db.actor),
-                faction = npc_comm
-            }
-            -- Innesca il delay radio del PDA per la fazione locale
-            faction_alert_status[npc_comm] = {
-                start_time = tg,
-                victim_id = npc_id,
-                triggered = false
-            }
-            local dialog_opened = false
-            local candidates = {"set_character_dialog", "set_dialog", "start_dialog", "start_character_dialog", "open_dialog", "character_dialog"}
-            local tried = {}
-            for _, name in ipairs(candidates) do
-                local fn = npc[name]
-                if type(fn) == "function" then
-                    -- Try multiple calling signatures to match engine binding
-                    local patterns = {
-                        function() return fn(npc, "surrender_bribe_dialog") end,
-                        function() return fn("surrender_bribe_dialog") end,
-                        function() return fn(npc, "surrender_bribe_dialog", db.actor) end,
-                        function() return fn("surrender_bribe_dialog", db.actor) end,
-                        function() return fn(npc) end,
-                    }
-                    for _, pat in ipairs(patterns) do
-                        local ok, res = pcall(pat)
-                        table.insert(tried, {name = name, ok = ok, res = tostring(res)})
-                        if ok then
-                            dialog_opened = true
-                            break
+            local active_item = db.actor:active_item()
+            if active_item and active_item:section() == "device_pda" then
+                affected_npcs[npc_id] = {
+                    timestamp = tg,
+                    state = "waiting",
+                    original_relation = npc:relation(db.actor),
+                    faction = npc_comm
+                }
+                -- Triggers the PDA radio delay for the local faction
+                faction_alert_status[npc_comm] = {
+                    start_time = tg,
+                    victim_id = npc_id,
+                    triggered = false
+                }
+                local dialog_opened = false
+                local candidates = {"set_character_dialog", "set_dialog", "start_dialog", "start_character_dialog", "open_dialog", "character_dialog"}
+                local tried = {}
+                for _, name in ipairs(candidates) do
+                    local fn = npc[name]
+                    if type(fn) == "function" then
+                        -- Try multiple calling signatures to match engine binding
+                        local patterns = {
+                            function() return fn(npc, "surrender_bribe_dialog") end,
+                            function() return fn("surrender_bribe_dialog") end,
+                            function() return fn(npc, "surrender_bribe_dialog", db.actor) end,
+                            function() return fn("surrender_bribe_dialog", db.actor) end,
+                            function() return fn(npc) end,
+                        }
+                        for _, pat in ipairs(patterns) do
+                            local ok, res = pcall(pat)
+                            table.insert(tried, {name = name, ok = ok, res = tostring(res)})
+                            if ok then
+                                dialog_opened = true
+                                break
+                            end
                         end
+                        if dialog_opened then break end
                     end
-                    if dialog_opened then break end
                 end
-            end
-            if not dialog_opened then
-                -- Send compact debug info to help identify which signatures exist
-                local msg = "PDA dialog not opened. Tried:"
-                for i, t in ipairs(tried) do
-                    if i > 4 then break end
-                    msg = msg .. "\n" .. t.name .. " => " .. (t.ok and "ok" or "err")
+                if not dialog_opened then
+                    -- Send compact debug info to help identify which signatures exist
+                    local msg = "PDA dialog not opened. Tried:"
+                    for i, t in ipairs(tried) do
+                        if i > 4 then break end
+                        msg = msg .. "\n" .. t.name .. " => " .. (t.ok and "ok" or "err")
+                    end
+                    news_manager.send_tip(db.actor, msg, nil, "recent_context", 6000)
                 end
-                news_manager.send_tip(db.actor, msg, nil, "recent_context", 6000)
+                news_manager.send_tip(db.actor, "PDA: Friendly fire detected on frequency " .. npc_comm .. "! Network analysis in progress...", nil, "recent_context", 4000)
+            else
+                -- No PDA: apply penalty immediately, no second chance
+                apply_double_reputation_loss(npc_comm)
+                npc:set_relation(game_object.enemy, db.actor)
+                manage_local_faction(npc, game_object.enemy, nil)
             end
-            news_manager.send_tip(db.actor, "PDA: Fuoco amico su frequenza " .. npc_comm .. "! Analisi di rete in corso...", nil, "recent_context", 4000)
         end
     end
 end
