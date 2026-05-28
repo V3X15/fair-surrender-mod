@@ -114,35 +114,40 @@ function actor_update()
     end
     -- 1. Gestione del Delay del PDA per la fazione circostante
     for comm, alert in pairs(faction_alert_status) do
-        if not alert.triggered then
-            local victim = level.object_by_id(alert.victim_id)
-            if victim and victim:alive() then
-                if (tg - alert.start_time) < (FACTION_DELAY * 1000) then
-                    manage_local_faction(victim, game_object.neutral, anim.panic)
-                else
-                    if weapon_is_safe then
-                        -- Pacify ALL involved NPCs in the faction
-                        for id, obj in pairs(db.storage) do
-                            local npc = level.object_by_id(id)
-                            if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
-                                npc:set_relation(game_object.neutral, db.actor)
-                                npc:set_mental_state(anim.panic)
-                            end
-                        end
-                        alert.triggered = true
-                    else
-                        -- All become enemies
-                        for id, obj in pairs(db.storage) do
-                            local npc = level.object_by_id(id)
-                            if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
-                                npc:set_relation(game_object.enemy, db.actor)
-                            end
-                        end
-                        faction_alert_status[comm] = nil
+        local victim = level.object_by_id(alert.victim_id)
+        if not victim or not victim:alive() then
+            faction_alert_status[comm] = nil
+        else
+            if (tg - alert.start_time) < (FACTION_DELAY * 1000) then
+                -- Durante il delay: forza la neutralità ogni tick
+                for id, obj in pairs(db.storage) do
+                    local npc = level.object_by_id(id)
+                    if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
+                        npc:set_relation(game_object.neutral, db.actor)
+                        npc:set_mental_state(anim.panic)
                     end
                 end
             else
-                faction_alert_status[comm] = nil
+                if weapon_is_safe then
+                    -- Dopo il delay: continua a forzare la neutralità ogni tick finché la situazione non si è pacificata
+                    for id, obj in pairs(db.storage) do
+                        local npc = level.object_by_id(id)
+                        if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
+                            npc:set_relation(game_object.neutral, db.actor)
+                            npc:set_mental_state(anim.panic)
+                        end
+                    end
+                    alert.triggered = true
+                else
+                    -- Tutti diventano nemici
+                    for id, obj in pairs(db.storage) do
+                        local npc = level.object_by_id(id)
+                        if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
+                            npc:set_relation(game_object.enemy, db.actor)
+                        end
+                    end
+                    faction_alert_status[comm] = nil
+                end
             end
         end
     end
@@ -152,9 +157,19 @@ function actor_update()
         if npc and npc:alive() then
             if data.state == "waiting" then
                 if (tg - data.timestamp) > (TIMER_LIMIT * 1000) then
-                    apply_double_reputation_loss(data.faction)
-                    npc:set_relation(game_object.enemy, db.actor)
-                    manage_local_faction(npc, game_object.enemy, nil)
+                    local pacified = false
+                    if weapon_is_safe then
+                        npc:set_relation(game_object.neutral, db.actor)
+                        npc:set_mental_state(anim.panic)
+                        pacified = true
+                    else
+                        npc:set_relation(game_object.enemy, db.actor)
+                        manage_local_faction(npc, game_object.enemy, nil)
+                    end
+                    -- Penalità solo se NON pacificato
+                    if not pacified then
+                        apply_double_reputation_loss(data.faction)
+                    end
                     affected_npcs[npc_id] = nil
                     faction_alert_status[data.faction] = nil
                 elseif weapon_is_safe and (tg - data.timestamp) >= (FACTION_DELAY * 1000) then
