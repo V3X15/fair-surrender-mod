@@ -7,6 +7,7 @@ local FACTION_DELAY = 3     -- Delay in seconds before nearby allies attack
 local BASE_COST = 5000
 local REP_PENALTY_FORCED = -25 -- Reduced reputation loss
 local affected_npcs = {} -- [npc_id] = { ... }
+local recently_pacified = {} -- [npc_id] = timestamp
 local surrender_main_npc_id = nil -- ID del PNG principale per dialogo
 local faction_alert_status = {} -- Tracks faction alert in the area
 local rank_values = {
@@ -37,6 +38,10 @@ end
 function npc_on_hit(npc, damage, direction, who, bone_id)
     if not (who and who:id() == AC_ID) then return end
     if not (npc and IsStalker(npc) and npc:alive()) then return end
+    local now = time_global()
+    if recently_pacified[npc:id()] and (now - recently_pacified[npc:id()]) < 60000 then
+        return -- NPC appena pacificato, ignora nuovo trigger per 60s
+    end
     local npc_id = npc:id()
     local npc_comm = npc:character_community()
     local actor_comm = db.actor:character_community()
@@ -58,13 +63,14 @@ function npc_on_hit(npc, damage, direction, who, bone_id)
         end
         -- Il principale è quello colpito
         surrender_main_npc_id = npc_id
-        -- Triggers the PDA radio delay for la fazione
+        -- Triggers the PDA radio delay per la fazione
         faction_alert_status[npc_comm] = {
             start_time = tg,
             victim_id = npc_id,
             triggered = false
         }
-        news_manager.send_tip(db.actor, "PDA: Friendly fire detected on frequency " .. npc_comm .. "! Network analysis in progress...", nil, "recent_context", 4000)
+        -- Solo il PNG colpito invia la chiamata d'aiuto
+        news_manager.send_tip(db.actor, "PDA: " .. npc:character_name() .. " (" .. npc_comm .. ") is calling for help after friendly fire! Network analysis in progress...", nil, "recent_context", 4000)
     end
 end
 function actor_update()
@@ -129,6 +135,7 @@ function actor_update()
                     if weapon_is_safe then
                         npc:set_relation(game_object.neutral, db.actor)
                         npc:set_mental_state(anim.free)
+                        recently_pacified[npc_id] = tg
                     else
                         npc:set_relation(game_object.enemy, db.actor)
                         manage_local_faction(npc, game_object.enemy, nil)
@@ -152,6 +159,7 @@ function actor_update()
                 elseif weapon_is_safe and (tg - data.timestamp) >= (FACTION_DELAY * 1000) then
                     npc:set_relation(game_object.neutral, db.actor)
                     npc:set_mental_state(anim.free)
+                    recently_pacified[npc_id] = tg
                     data.state = "pacified"
                 end
             elseif data.state == "pacified" and not weapon_is_safe then
@@ -185,16 +193,24 @@ end
 function precondition_cannot_afford(actor, npc)
     return actor:money() < get_bribe_cost(npc)
 end
+-- ===================== DIALOGHI E SURRENDER (DISATTIVABILI) =====================
+-- Queste funzioni gestiscono il dialogo e la risoluzione "pacifica". Puoi commentare tutto questo blocco per disattivare la feature.
+
 function action_pay_bribe(actor, npc)
+    -- Solo il singolo NPC riceve i soldi
     local cost = get_bribe_cost(npc)
     actor:transfer_money(cost, npc)
     close_surrender_incident(npc, true)
 end
+
 function action_accept_forced_task(actor, npc)
+    -- Solo il singolo NPC assegna la missione
     task_manager.get_task_manager():give_task("surrender_bribe_task")
     close_surrender_incident(npc, false)
 end
+
 function action_refuse_and_punish(actor, npc)
+    -- Solo il singolo NPC applica la penalità
     local npc_id = npc:id()
     local faction = npc:character_community()
     apply_double_reputation_loss(faction)
@@ -203,7 +219,9 @@ function action_refuse_and_punish(actor, npc)
     affected_npcs[npc_id] = nil
     faction_alert_status[faction] = nil
 end
+
 function close_surrender_incident(npc, success)
+    -- Solo il singolo NPC torna neutrale, ma tutti i PNG della fazione tornano idle
     local npc_id = npc:id()
     local comm = npc:character_community()
     if success then
@@ -212,9 +230,12 @@ function close_surrender_incident(npc, success)
     if affected_npcs[npc_id] then
         local target_relation = success and affected_npcs[npc_id].original_relation or game_object.neutral
         npc:set_relation(target_relation, db.actor)
+        -- Solo qui: tutti i PNG della fazione tornano idle, ma nessuna penalità o soldi coinvolti
         manage_local_faction(npc, target_relation, anim.free)
         affected_npcs[npc_id] = nil
     end
     faction_alert_status[comm] = nil
     npc:reset_action_queue()
 end
+
+-- ===================== FINE BLOCCO DIALOGHI/SURRENDER =====================

@@ -6,12 +6,14 @@
 
 Adds a surrender and faction penalty system for friendly fire incidents with PDA network integration.
 
+**Note:** Dialog and bribe options are currently a work in progress (TODO). For now, only pacification and reputation penalty are fully functional.
+
 ## Features
 - 3-second faction delay before automatic hostility
 - Local PDA network faction coordination
 - Dynamic NPC behavior management
-    - Bribery system to stop faction alerts
-    - Forced timed quest alternative for broke players
+    - Bribery system to stop faction alerts (**TODO: not yet functional**)
+    - Forced timed quest alternative for broke players (**TODO: not yet functional**)
     - Double reputation loss on failure/refusal
 
 ## Created Files
