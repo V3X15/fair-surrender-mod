@@ -8,6 +8,7 @@ local BASE_COST = 5000
 local REP_PENALTY_FORCED = -25 -- Reduced reputation loss
 local affected_npcs = {} -- [npc_id] = { ... }
 local recently_pacified = {} -- [npc_id] = timestamp
+-- (tregua rimossa)
 local surrender_main_npc_id = nil -- ID del PNG principale per dialogo
 local faction_alert_status = {} -- Tracks faction alert in the area
 local rank_values = {
@@ -42,6 +43,7 @@ function npc_on_hit(npc, damage, direction, who, bone_id)
     if recently_pacified[npc:id()] and (now - recently_pacified[npc:id()]) < 60000 then
         return -- NPC appena pacificato, ignora nuovo trigger per 60s
     end
+    -- (tregua rimossa)
     local npc_id = npc:id()
     local npc_comm = npc:character_community()
     local actor_comm = db.actor:character_community()
@@ -103,7 +105,7 @@ function actor_update()
                 end
             else
                 if weapon_is_safe then
-                    -- Dopo il delay: continua a forzare la neutralità ogni tick finché la situazione non si è pacificata
+                    -- Dopo il delay: se abbassi l'arma, pacifica e attiva tregua
                     for id, obj in pairs(db.storage) do
                         local npc = level.object_by_id(id)
                         if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
@@ -125,44 +127,38 @@ function actor_update()
             end
         end
     end
+
+    -- (tregua rimossa)
     -- 2. Handling of the main target caught by friendly fire
     for npc_id, data in pairs(affected_npcs) do
         local npc = level.object_by_id(npc_id)
         if npc and npc:alive() then
             if data.state == "waiting" then
                 if (tg - data.timestamp) > (TIMER_LIMIT * 1000) then
-                    local all_pacified = true
                     if weapon_is_safe then
+                        -- Player ha abbassato l'arma entro il tempo limite: pacifica
                         npc:set_relation(game_object.neutral, db.actor)
                         npc:set_mental_state(anim.free)
                         recently_pacified[npc_id] = tg
+                        affected_npcs[npc_id] = nil
+                        faction_alert_status[data.faction] = nil
                     else
+                        -- Player NON ha abbassato l'arma: fazione ostile
                         npc:set_relation(game_object.enemy, db.actor)
                         manage_local_faction(npc, game_object.enemy, nil)
-                        all_pacified = false
-                    end
-                    -- Controlla tutti gli NPC della fazione: se almeno uno è ostile, penalità
-                    for id, obj in pairs(db.storage) do
-                        local other = level.object_by_id(id)
-                        if other and other:character_community() == data.faction and other:alive() and id ~= AC_ID then
-                            if other:relation(db.actor) ~= game_object.neutral then
-                                all_pacified = false
-                                break
-                            end
-                        end
-                    end
-                    if not all_pacified then
                         apply_double_reputation_loss(data.faction)
+                        affected_npcs[npc_id] = nil
+                        faction_alert_status[data.faction] = nil
                     end
-                    affected_npcs[npc_id] = nil
-                    faction_alert_status[data.faction] = nil
                 elseif weapon_is_safe and (tg - data.timestamp) >= (FACTION_DELAY * 1000) then
+                    -- Player abbassa l'arma prima dello scadere: pacifica
                     npc:set_relation(game_object.neutral, db.actor)
                     npc:set_mental_state(anim.free)
                     recently_pacified[npc_id] = tg
                     data.state = "pacified"
                 end
             elseif data.state == "pacified" and not weapon_is_safe then
+                -- Se il player minaccia di nuovo dopo la pacificazione, scatta la penalità
                 apply_double_reputation_loss(data.faction)
                 npc:set_relation(game_object.enemy, db.actor)
                 manage_local_faction(npc, game_object.enemy, nil)
@@ -173,6 +169,8 @@ function actor_update()
             affected_npcs[npc_id] = nil
         end
     end
+-- Reset della tregua in caso di cambio mappa o dormita
+-- (tregua rimossa)
 end
 function apply_double_reputation_loss(faction)
     game_relations.change_factions_community_num(faction, AC_ID, REP_PENALTY_FORCED)
