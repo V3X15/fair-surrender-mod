@@ -5,8 +5,9 @@
 local TIMER_LIMIT = 5       -- Maximum time for the player to holster the weapon
 local FACTION_DELAY = 3     -- Delay in seconds before nearby allies attack
 local BASE_COST = 5000
-local REP_PENALTY_FORCED = -200 -- Double reputation loss (hardcore penalty)
-local affected_npcs = {}
+local REP_PENALTY_FORCED = -25 -- Reduced reputation loss
+local affected_npcs = {} -- [npc_id] = { ... }
+local surrender_main_npc_id = nil -- ID del PNG principale per dialogo
 local faction_alert_status = {} -- Tracks faction alert in the area
 local rank_values = {
     ["novice"] = 1, ["trainee"] = 2, ["experienced"] = 3, ["professional"] = 4,
@@ -40,74 +41,43 @@ function npc_on_hit(npc, damage, direction, who, bone_id)
     local npc_comm = npc:character_community()
     local actor_comm = db.actor:character_community()
     if game_relations.is_factions_friends(actor_comm, npc_comm) or game_relations.is_factions_neutrals(actor_comm, npc_comm) then
-        if not affected_npcs[npc_id] then
-            local tg = time_global()
-            local active_item = db.actor:active_item()
-            if active_item and active_item:section() == "device_pda" then
-                affected_npcs[npc_id] = {
-                    timestamp = tg,
-                    state = "waiting",
-                    original_relation = npc:relation(db.actor),
-                    faction = npc_comm
-                }
-                -- Triggers the PDA radio delay for the local faction
-                faction_alert_status[npc_comm] = {
-                    start_time = tg,
-                    victim_id = npc_id,
-                    triggered = false
-                }
-                local dialog_opened = false
-                local candidates = {"set_character_dialog", "set_dialog", "start_dialog", "start_character_dialog", "open_dialog", "character_dialog"}
-                local tried = {}
-                for _, name in ipairs(candidates) do
-                    local fn = npc[name]
-                    if type(fn) == "function" then
-                        -- Try multiple calling signatures to match engine binding
-                        local patterns = {
-                            function() return fn(npc, "surrender_bribe_dialog") end,
-                            function() return fn("surrender_bribe_dialog") end,
-                            function() return fn(npc, "surrender_bribe_dialog", db.actor) end,
-                            function() return fn("surrender_bribe_dialog", db.actor) end,
-                            function() return fn(npc) end,
-                        }
-                        for _, pat in ipairs(patterns) do
-                            local ok, res = pcall(pat)
-                            table.insert(tried, {name = name, ok = ok, res = tostring(res)})
-                            if ok then
-                                dialog_opened = true
-                                break
-                            end
-                        end
-                        if dialog_opened then break end
-                    end
+        local tg = time_global()
+        -- Salva tutti i PNG della fazione colpita
+        for id, obj in pairs(db.storage) do
+            local other = level.object_by_id(id)
+            if other and other:character_community() == npc_comm and other:alive() and id ~= AC_ID then
+                if not affected_npcs[id] then
+                    affected_npcs[id] = {
+                        timestamp = tg,
+                        state = "waiting",
+                        original_relation = other:relation(db.actor),
+                        faction = npc_comm
+                    }
                 end
-                if not dialog_opened then
-                    -- Send compact debug info to help identify which signatures exist
-                    local msg = "PDA dialog not opened. Tried:"
-                    for i, t in ipairs(tried) do
-                        if i > 4 then break end
-                        msg = msg .. "\n" .. t.name .. " => " .. (t.ok and "ok" or "err")
-                    end
-                    news_manager.send_tip(db.actor, msg, nil, "recent_context", 6000)
-                end
-                news_manager.send_tip(db.actor, "PDA: Friendly fire detected on frequency " .. npc_comm .. "! Network analysis in progress...", nil, "recent_context", 4000)
-            else
-                -- No PDA: apply penalty immediately, no second chance
-                apply_double_reputation_loss(npc_comm)
-                npc:set_relation(game_object.enemy, db.actor)
-                manage_local_faction(npc, game_object.enemy, nil)
             end
         end
+        -- Il principale è quello colpito
+        surrender_main_npc_id = npc_id
+        -- Triggers the PDA radio delay for la fazione
+        faction_alert_status[npc_comm] = {
+            start_time = tg,
+            victim_id = npc_id,
+            triggered = false
+        }
+        news_manager.send_tip(db.actor, "PDA: Friendly fire detected on frequency " .. npc_comm .. "! Network analysis in progress...", nil, "recent_context", 4000)
     end
 end
 function actor_update()
     local tg = time_global()
     local active_item = db.actor:active_item()
     local weapon_is_safe = false
-    if (not active_item)
-        or (active_item:section() == "device_pda")
-        or (string.sub(active_item:section(), 1, 9) == "detector_")
-    then
+    -- Debug rimossi: non stampare più nulla nella chat del PDA durante la scansione arma
+    if (not active_item) then
+        weapon_is_safe = true -- Mani vuote
+    elseif active_item and (string.find(active_item:section(), "pda") or string.find(active_item:section(), "detector")) then
+        weapon_is_safe = true -- PDA o detector
+    elseif active_item and active_item.get_state and (active_item:get_state() == 0 or active_item:get_state() == 2) then
+        -- Stato 0: idle/holstered, Stato 2: lowered (valori comuni in Anomaly, da adattare se necessario)
         weapon_is_safe = true
     end
     -- 1. Gestione del Delay del PDA per la fazione circostante
@@ -122,7 +92,7 @@ function actor_update()
                     local npc = level.object_by_id(id)
                     if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
                         npc:set_relation(game_object.neutral, db.actor)
-                        npc:set_mental_state(anim.panic)
+                        npc:set_mental_state(anim.free)
                     end
                 end
             else
@@ -132,7 +102,7 @@ function actor_update()
                         local npc = level.object_by_id(id)
                         if npc and npc:character_community() == comm and npc:alive() and id ~= AC_ID then
                             npc:set_relation(game_object.neutral, db.actor)
-                            npc:set_mental_state(anim.panic)
+                            npc:set_mental_state(anim.free)
                         end
                     end
                     alert.triggered = true
@@ -158,7 +128,7 @@ function actor_update()
                     local all_pacified = true
                     if weapon_is_safe then
                         npc:set_relation(game_object.neutral, db.actor)
-                        npc:set_mental_state(anim.panic)
+                        npc:set_mental_state(anim.free)
                     else
                         npc:set_relation(game_object.enemy, db.actor)
                         manage_local_faction(npc, game_object.enemy, nil)
@@ -181,7 +151,7 @@ function actor_update()
                     faction_alert_status[data.faction] = nil
                 elseif weapon_is_safe and (tg - data.timestamp) >= (FACTION_DELAY * 1000) then
                     npc:set_relation(game_object.neutral, db.actor)
-                    npc:set_mental_state(anim.panic)
+                    npc:set_mental_state(anim.free)
                     data.state = "pacified"
                 end
             elseif data.state == "pacified" and not weapon_is_safe then
