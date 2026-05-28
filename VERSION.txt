@@ -1,0 +1,8 @@
+Fair Surrender Mod
+Version: 1.0.0
+Release Date: 2026-05-28
+
+Versioning Scheme: MAJOR.MINOR.PATCH
+- MAJOR: Breaking changes or major feature additions
+- MINOR: New features, bug fixes, minor improvements
+- PATCH: Bug fixes, documentation updates
